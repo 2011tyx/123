@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
         root.addView(tip);
 
         start = new Button(this);
-        start.setOnClickListener(v -> onStart());
+        start.setOnClickListener(v -> launch());
         root.addView(start, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void onStart() {
+    private void launch() {
         if (!Settings.canDrawOverlays(this)) {
             Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + getPackageName()));
