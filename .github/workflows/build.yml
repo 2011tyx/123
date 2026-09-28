@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Island
 
 on:
   push:
@@ -30,8 +30,52 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Pack KernelSU module zip
+        run: |
+          set -e
+          rm -rf mod
+          mkdir -p mod
+          cp app/build/outputs/apk/debug/app-debug.apk mod/island.apk
+          cat > mod/module.prop << 'EOF'
+          id=sxc_island
+          name=沈小词·灵动岛
+          version=1.0
+          versionCode=1
+          author=沈小词
+          description=刷入即自动装好灵动岛并开机自启，无需手动操作。
+          EOF
+          cat > mod/customize.sh << 'EOF'
+          #!/system/bin/sh
+          SKIPUNZIP=0
+          ui_print "- 正在安装灵动岛 App..."
+          pm install -r "$MODPATH/island.apk" >/dev/null 2>&1
+          ui_print "- 已自动开启悬浮窗权限"
+          appops set com.sxc.island SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1
+          ui_print "- 完成！重启后灵动岛自动出现"
+          EOF
+          cat > mod/service.sh << 'EOF'
+          #!/system/bin/sh
+          MODDIR=${0%/*}
+          until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
+          sleep 12
+          if ! pm list packages 2>/dev/null | grep -q com.sxc.island; then
+            pm install -r "$MODDIR/island.apk"
+            sleep 6
+          fi
+          appops set com.sxc.island SYSTEM_ALERT_WINDOW allow
+          am start-foreground-service com.sxc.island/.IslandService
+          while true; do
+            sleep 60
+            pgrep -f com.sxc.island >/dev/null 2>&1 || am start-foreground-service com.sxc.island/.IslandService
+          done
+          EOF
+          cd mod
+          zip -r ../sxc_island.zip .
+          cd ..
+          ls -lh sxc_island.zip
+
+      - name: Upload module zip
         uses: actions/upload-artifact@v4
         with:
-          name: sxc-island-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: sxc_island_module
+          path: sxc_island.zip
