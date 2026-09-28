@@ -7,6 +7,7 @@ import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.view.animation.OvershootInterpolator;
@@ -15,7 +16,7 @@ import android.widget.TextView;
 
 public class IslandUI {
 
-    private static final int WC = 96, HC = 30, WE = 290, HE = 78;
+    private static final float REF = 440f, RW = 126f, RH = 37.3f, EW = 371f;
 
     private final Context ctx;
     private final WindowManager wm;
@@ -24,15 +25,32 @@ public class IslandUI {
     private TextView label;
     private GradientDrawable bg;
     private Runnable autoHide;
-    private boolean expanded = false;
+    private boolean expanded;
+    private int cw, ch, ew;
+    private float k = 1f;
 
     public IslandUI(Context c) {
         ctx = c;
         wm = (WindowManager) c.getSystemService(Context.WINDOW_SERVICE);
+        size();
     }
 
     public boolean isExpanded() {
         return expanded;
+    }
+
+    private void size() {
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        k = Math.min(dm.widthPixels, dm.heightPixels) / REF;
+        cw = Math.round(RW * k);
+        ch = Math.round(RH * k);
+        ew = Math.round(EW * k);
+    }
+
+    private int topY() {
+        int id = ctx.getResources().getIdentifier("status_bar_height", "dimen", "android");
+        int sb = id > 0 ? ctx.getResources().getDimensionPixelSize(id) : ch * 2;
+        return Math.max(0, (sb - ch) / 2);
     }
 
     public void show() {
@@ -42,12 +60,12 @@ public class IslandUI {
 
         bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#000000"));
-        bg.setCornerRadius(dp(HC) / 2f);
+        bg.setCornerRadius(ch / 2f);
         island.setBackground(bg);
 
         label = new TextView(ctx);
         label.setTextColor(Color.WHITE);
-        label.setTextSize(13);
+        label.setTextSize(13f * k);
         label.setGravity(Gravity.CENTER);
         island.addView(label);
 
@@ -69,43 +87,36 @@ public class IslandUI {
                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
         lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        lp.width = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-        lp.y = dp(4);
+        lp.width = cw;
+        lp.height = ch;
+        lp.y = topY();
         wm.addView(island, lp);
 
         island.setAlpha(0f);
-        island.setScaleX(0.3f);
-        island.setScaleY(0.3f);
-        island.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                .setDuration(600)
-                .setInterpolator(new OvershootInterpolator(1.6f))
-                .start();
+        island.animate().alpha(1f).setDuration(500).start();
     }
 
     public void hide() {
         ui.removeCallbacksAndMessages(null);
         try {
-            if (island != null) {
-                wm.removeView(island);
-            }
+            wm.removeView(island);
         } catch (Exception e) {
         }
         island = null;
     }
 
-    public void expand(String text, long autoHideMs) {
+    public void expand(String text, long ms) {
         if (island == null) {
             return;
         }
         expanded = true;
         label.setText(text);
-        resize(dp(WE), dp(HE));
+        resize(ew, ch);
         if (autoHide != null) {
             ui.removeCallbacks(autoHide);
         }
         autoHide = this::collapse;
-        ui.postDelayed(autoHide, autoHideMs);
+        ui.postDelayed(autoHide, ms);
     }
 
     private void collapse() {
@@ -114,27 +125,24 @@ public class IslandUI {
         }
         expanded = false;
         label.setText("");
-        resize(dp(WC), dp(HC));
+        resize(cw, ch);
     }
 
-    private void resize(final int tw, final int th) {
-        final int w0 = Math.max(1, island.getWidth());
-        final int h0 = Math.max(1, island.getHeight());
+    private void resize(int tw, int th) {
+        WindowManager.LayoutParams p0 = (WindowManager.LayoutParams) island.getLayoutParams();
+        final int w0 = p0.width;
+        final int h0 = p0.height;
         ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
         a.setDuration(430);
         a.setInterpolator(new OvershootInterpolator(1.4f));
         a.addUpdateListener(an -> {
             float f = an.getAnimatedFraction();
-            LinearLayout.LayoutParams p = (LinearLayout.LayoutParams) island.getLayoutParams();
+            WindowManager.LayoutParams p = (WindowManager.LayoutParams) island.getLayoutParams();
             p.width = Math.max(1, (int) (w0 + (tw - w0) * f));
             p.height = Math.max(1, (int) (h0 + (th - h0) * f));
-            island.setLayoutParams(p);
             bg.setCornerRadius(p.height / 2f);
+            wm.updateViewLayout(island, p);
         });
         a.start();
     }
-
-    private int dp(int v) {
-        return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
-    }
-          }
+}
